@@ -554,3 +554,33 @@ test("RPC cancellation preserves the persisted task list", async () => {
  f.cleanup();
  }
 });
+
+test("update_goal_task tolerates redundant single-task fields when updates batch is provided", async () => {
+ const f = fixtureWithTasks([{ id: "t1", title: "Task one", status: "pending" }]);
+ try {
+ const h = createHarness(f.cwd, f.sessionEntries);
+ await h.handlers.get("session_start")?.({ reason: "start" }, h.ctx);
+ await h.handlers.get("before_agent_start")?.({ systemPrompt: "base", prompt: "go", systemPromptOptions: {} }, h.ctx);
+ const tool = h.tools.get("update_goal_task")!;
+ // LLMs frequently send both single-task fields and updates array in the same tool call
+ const result = await (tool.execute as any)(
+  "upd-redundant",
+  {
+   task_id: "t1",
+   status: "complete",
+   evidence: "verified",
+   reason: "",
+   updates: [{ task_id: "t1", status: "complete", evidence: "verified" }],
+  },
+  undefined,
+  undefined,
+  h.ctx,
+ );
+ const text = result.content?.[0]?.text ?? "";
+ assert.ok(!text.includes("Use either updates or single-task fields"), `should not reject redundant fields, got: ${text}`);
+ const goal = activeGoal(f.cwd);
+ assert.equal(goal?.taskList?.tasks[0]?.status, "complete");
+ } finally {
+ f.cleanup();
+ }
+});

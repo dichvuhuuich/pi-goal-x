@@ -405,22 +405,25 @@ pi.registerTool(defineTool({
 	}, { additionalProperties: false }),
 	executionMode: "sequential",
 	async execute(_toolCallId, rawParams, _signal, _onUpdate, ctx) {
-  if (rawParams.updates !== undefined) {
-   const fail = (text: string) => ({content: [{type: "text" as const, text}], details: goalDetails(core.state.goal)});
-   if ([rawParams.task_id, rawParams.status, rawParams.evidence, rawParams.reason].some(v => v !== undefined)) return fail("Use either updates or single-task fields, never both.");
-   const updates = rawParams.updates;
-   if (!Array.isArray(updates) || updates.length < 1 || updates.length > 100 || updates.some(u => !u || typeof u.task_id !== "string" || !u.task_id.trim() || !["start", "complete", "skipped", "pending"].includes(u.status) || (u.evidence !== undefined && typeof u.evidence !== "string") || (u.reason !== undefined && typeof u.reason !== "string"))) return fail("updates must contain 1–100 valid task updates.");
-   core.reconcileFocusedGoalFromDisk(ctx);
-   if (loadGoalSettings(ctx.cwd).disableTasks) return fail("update_goal_task is disabled by settings (disableTasks: true).");
-   if (!core.state.goal) return fail("No goal is focused.");
-   if (core.state.goal.status !== "active") return fail(`update_goal_task applies only to an active goal (current status: ${core.state.goal.status}).`);
-   const result = core.goalService.updateTasks(ctx, updates.map(u => progressSpec(u, core, ctx)));
-   if (!result.ok) return fail(result.message);
-   core.updateUI(ctx);
-   return fail(`${updates.map(u => `${u.task_id} ${u.status}`).join("; ")}. ${buildTaskSummary(result.goal.taskList!)}.`);
-  }
-  if (!rawParams.task_id || !rawParams.status) return {content: [{type: "text", text: "Provide task_id and status, or an updates batch."}], details: goalDetails(core.state.goal)};
-  const params = rawParams as TaskProgressInput;
+		const fail = (text: string) => ({content: [{type: "text" as const, text}], details: goalDetails(core.state.goal)});
+		const hasValidUpdates = Array.isArray(rawParams.updates) && rawParams.updates.length > 0;
+		if (hasValidUpdates) {
+			const updates = rawParams.updates!;
+			if (updates.length > 100 || updates.some(u => !u || typeof u.task_id !== "string" || !u.task_id.trim() || !["start", "complete", "skipped", "pending"].includes(u.status) || (u.evidence !== undefined && typeof u.evidence !== "string") || (u.reason !== undefined && typeof u.reason !== "string"))) return fail("updates must contain 1–100 valid task updates.");
+			core.reconcileFocusedGoalFromDisk(ctx);
+			if (loadGoalSettings(ctx.cwd).disableTasks) return fail("update_goal_task is disabled by settings (disableTasks: true).");
+			if (!core.state.goal) return fail("No goal is focused.");
+			if (core.state.goal.status !== "active") return fail(`update_goal_task applies only to an active goal (current status: ${core.state.goal.status}).`);
+			const result = core.goalService.updateTasks(ctx, updates.map(u => progressSpec(u, core, ctx)));
+			if (!result.ok) return fail(result.message);
+			core.updateUI(ctx);
+			return fail(`${updates.map(u => `${u.task_id} ${u.status}`).join("; ")}. ${buildTaskSummary(result.goal.taskList!)}.`);
+		}
+		if (rawParams.updates !== undefined && (!Array.isArray(rawParams.updates) || rawParams.updates.length === 0)) {
+			if (!rawParams.task_id || !rawParams.status) return fail("updates must contain 1–100 valid task updates.");
+		}
+		if (!rawParams.task_id || !rawParams.status) return {content: [{type: "text", text: "Provide task_id and status, or an updates batch."}], details: goalDetails(core.state.goal)};
+		const params = rawParams as TaskProgressInput;
 		core.reconcileFocusedGoalFromDisk(ctx);
 		if (loadGoalSettings(ctx.cwd).disableTasks) {
 			return {
